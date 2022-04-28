@@ -38,7 +38,7 @@ parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--wd', default=5e-4, type=float, help='weight decay')
 # adv parameters:
 parser.add_argument('--targeted', action='store_true', help='If true, targeted attack')
-parser.add_argument('--eps', type=int, default=8)
+parser.add_argument('--eps', type=int, default=31)
 parser.add_argument('--steps', type=int, default=7)
 # loss parameters:
 parser.add_argument('--Lambda', default=0.5, type=float, help='adv loss tradeoff parameter')
@@ -94,7 +94,7 @@ elif args.decay == 'multisteps':
     scheduler = lr_scheduler.MultiStepLR(optimizer, args.decay_epochs, gamma=0.1)
 
 # attacker:
-attacker = PGD(eps=args.eps/255, steps=args.steps)
+attacker = PGD(eps=args.eps/1000, steps=args.steps)
 
 # load ckpt:
 if args.resume:
