@@ -20,13 +20,13 @@ from utils.sample_lambda import element_wise_sample_lambda, batch_wise_sample_la
 from attacks.pgd import PGD
 
 parser = argparse.ArgumentParser(description='cifar10 Training')
-parser.add_argument('--gpu', default='7')
-parser.add_argument('--cpus', default=4)
+parser.add_argument('--gpu', default='0')
+parser.add_argument('--cpus', default=8)
 # dataset:
 parser.add_argument('--dataset', '--ds', default='cifar10', choices=['cifar10', 'svhn', 'stl10'], help='which dataset to use')
 # optimization parameters:
 parser.add_argument('--batch_size', '-b', default=128, type=int, help='mini-batch size')
-parser.add_argument('--epochs', '-e', default=200, type=int, help='number of total epochs to run')
+parser.add_argument('--epochs', '-e', default=100, type=int, help='number of total epochs to run')
 parser.add_argument('--decay_epochs', '--de', default=[50,150], nargs='+', type=int, help='milestones for multisteps lr decay')
 parser.add_argument('--opt', default='sgd', choices=['sgd', 'adam'], help='which optimizer to use')
 parser.add_argument('--decay', default='cos', choices=['cos', 'multisteps'], help='which lr decay method to use')
@@ -35,7 +35,7 @@ parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--wd', default=5e-4, type=float, help='weight decay')
 # adv parameters:
 parser.add_argument('--targeted', action='store_true', help='If true, targeted attack')
-parser.add_argument('--eps', type=int, default=8)
+parser.add_argument('--eps', type=int, default=31)
 parser.add_argument('--steps', type=int, default=7)
 # OAT parameters:
 parser.add_argument('--distribution', default='disc', choices=['disc'], help='Lambda distribution')
@@ -96,7 +96,7 @@ if args.probs > 0:
     lambda_str += '-%s' % args.probs
 if args.encoding in ['onehot', 'dct', 'rand']:
     lambda_str += '-%s-d%s' % (args.encoding, args.dim)
-save_folder = os.path.join('/hdd1/haotao/OAT_results', 'cifar10', model_str, '%s_%s_%s_%s' % (attack_str, opt_str, decay_str, lambda_str))
+save_folder = os.path.join(os.getcwd(), 'OAT_results', args.dataset, model_str, '%s_%s_%s_%s' % (attack_str, opt_str, decay_str, lambda_str))
 print(save_folder)
 create_dir(save_folder)
 
@@ -146,7 +146,7 @@ else:
         val_TA[val_lambda], val_ATA[val_lambda], best_TA[val_lambda], best_ATA[val_lambda] = [], [], 0, 0
 
 # attacker:
-attacker = PGD(eps=args.eps/255, steps=args.steps, use_FiLM=True)
+attacker = PGD(eps=args.eps/1000, steps=args.steps, use_FiLM=True)
 
 ## training:
 for epoch in range(start_epoch, args.epochs):
@@ -213,8 +213,8 @@ for epoch in range(start_epoch, args.epochs):
             accs_adv.append((logits_adv.argmax(1) == labels).float().mean().item())
         losses.append(loss.item())
 
-        if i % 100 == 0:
-            train_str = 'Epoch %d-%d | Train | Loss: %.4f, TA: %.4f, ATA: %.4f' % (
+        if i % 50 == 0:
+            train_str = 'Epoch %d-%d | Train | Loss: %.4f, SA: %.4f, RA: %.4f' % (
                 epoch, i, losses.avg, accs.avg, accs_adv.avg)
             print(train_str)
             # print('idx2BN:', idx2BN)
@@ -269,7 +269,7 @@ for epoch in range(start_epoch, args.epochs):
     if eval_this_epoch:
         val_str += ' | linf: %.4f - %.4f\n' % (torch.min(linf_norms).data, torch.max(linf_norms).data)
         for val_lambda in val_lambdas:
-            val_str += 'val_lambda%s: TA: %.4f, ATA: %.4f\n' % (val_lambda, val_accs[val_lambda].avg, val_accs_adv[val_lambda].avg)
+            val_str += 'val_lambda%s: SA: %.4f, RA: %.4f\n' % (val_lambda, val_accs[val_lambda].avg, val_accs_adv[val_lambda].avg)
     print(val_str)
     val_fp.write(val_str + '\n')
     val_fp.close() # close file pointer
@@ -277,6 +277,9 @@ for epoch in range(start_epoch, args.epochs):
     # save loss curve:
     training_loss.append(losses.avg)
     plt.plot(training_loss)
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training Loss')
     plt.grid(True)
     plt.savefig(os.path.join(save_folder, 'training_loss.png'))
     plt.close()
@@ -287,6 +290,10 @@ for epoch in range(start_epoch, args.epochs):
             plt.plot(val_TA[val_lambda], 'r')
             val_ATA[val_lambda].append(val_accs_adv[val_lambda].avg)
             plt.plot(val_ATA[val_lambda], 'g')
+            plt.xlabel('Epoch')
+            plt.ylabel('Accuracy')
+            plt.title('Validation Accuracy')
+            plt.legend(["SA", "RA"])
             plt.grid(True)
             plt.savefig(os.path.join(save_folder, 'val_acc%s.png' % val_lambda))
             plt.close()
@@ -296,6 +303,10 @@ for epoch in range(start_epoch, args.epochs):
             plt.plot(val_TA[val_lambda], 'r')
             val_ATA[val_lambda].append(val_ATA[val_lambda][-1])
             plt.plot(val_ATA[val_lambda], 'g')
+            plt.xlabel('Epoch')
+            plt.ylabel('Accuracy')
+            plt.title('Validation Accuracy')
+            plt.legend(["SA", "RA"])
             plt.grid(True)
             plt.savefig(os.path.join(save_folder, 'val_acc%s.png' % val_lambda))
             plt.close()
@@ -305,10 +316,10 @@ for epoch in range(start_epoch, args.epochs):
         for val_lambda in val_lambdas:
             if val_accs[val_lambda].avg >= best_TA[val_lambda]:
                 best_TA[val_lambda] = val_accs[val_lambda].avg # update best TA
-                torch.save(model.state_dict(), os.path.join(save_folder, 'best_TA%s.pth' % val_lambda))
+                torch.save(model.state_dict(), os.path.join(save_folder, 'best_SA%s.pth' % val_lambda))
             if val_accs_adv[val_lambda].avg >= best_ATA[val_lambda]:
                 best_ATA[val_lambda] = val_accs_adv[val_lambda].avg # update best ATA
-                torch.save(model.state_dict(), os.path.join(save_folder, 'best_ATA%s.pth' % val_lambda))
+                torch.save(model.state_dict(), os.path.join(save_folder, 'best_RA%s.pth' % val_lambda))
     save_ckpt(epoch, model, optimizer, scheduler, best_TA, best_ATA, training_loss, val_TA, val_ATA, 
         os.path.join(save_folder, 'latest.pth'))
         

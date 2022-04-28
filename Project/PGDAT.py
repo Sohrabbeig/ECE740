@@ -23,13 +23,13 @@ from utils.context import ctx_noparamgrad_and_eval
 from attacks.pgd import PGD
 
 parser = argparse.ArgumentParser(description='CIFAR10 Training against DDN Attack')
-parser.add_argument('--gpu', default='7')
-parser.add_argument('--cpus', default=4)
+parser.add_argument('--gpu', default='0')
+parser.add_argument('--cpus', default=8)
 # dataset:
 parser.add_argument('--dataset', '--ds', default='cifar10', choices=['cifar10', 'svhn', 'stl10'], help='which dataset to use')
 # optimization parameters:
 parser.add_argument('--batch_size', '-b', default=256, type=int, help='mini-batch size')
-parser.add_argument('--epochs', '-e', default=200, type=int, help='number of total epochs to run')
+parser.add_argument('--epochs', '-e', default=100, type=int, help='number of total epochs to run')
 parser.add_argument('--decay_epochs', '--de', default=[50,150], nargs='+', type=int, help='milestones for multisteps lr decay')
 parser.add_argument('--opt', default='sgd', choices=['sgd', 'adam'], help='which optimizer to use')
 parser.add_argument('--decay', default='cos', choices=['cos', 'multisteps'], help='which lr decay method to use')
@@ -80,7 +80,7 @@ elif args.decay == 'multisteps':
     decay_str = 'multisteps-%s' % args.decay_epochs
 attack_str = 'targeted' if args.targeted else 'untargeted' + '-pgd-%d-%d' % (args.eps, args.steps)
 loss_str = 'lambda%s' % (args.Lambda)
-save_folder = os.path.join('/hdd1/haotao/OAT_results', args.dataset, model_str, '%s_%s_%s_%s' % (attack_str, opt_str, decay_str, loss_str))
+save_folder = os.path.join(os.getcwd(), 'PGD_results', args.dataset, model_str, '%s_%s_%s_%s' % (attack_str, opt_str, decay_str, loss_str))
 create_dir(save_folder)
 
 # optimizer:
@@ -143,7 +143,7 @@ for epoch in range(start_epoch, args.epochs):
             accs_adv.append((logits_adv.argmax(1) == labels).float().mean().item())
         losses.append(loss.item())
 
-        if i % 50 == 0:
+        if i % 100 == 0:
             train_str = 'Epoch %d-%d | Train | Loss: %.4f, SA: %.4f' % (epoch, i, losses.avg, accs.avg)
             if args.Lambda != 0:
                 train_str += ', RA: %.4f' % (accs_adv.avg)
@@ -187,6 +187,9 @@ for epoch in range(start_epoch, args.epochs):
     # save loss curve:
     training_loss.append(losses.avg)
     plt.plot(training_loss)
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training Loss')
     plt.grid(True)
     plt.savefig(os.path.join(save_folder, 'training_loss.png'))
     plt.close()
@@ -196,6 +199,10 @@ for epoch in range(start_epoch, args.epochs):
         plt.plot(val_TA, 'r')
         val_ATA.append(val_accs_adv.avg)
         plt.plot(val_ATA, 'g')
+        plt.xlabel('Epoch')
+        plt.ylabel('Accuracy')
+        plt.title('Validation Accuracy')
+        plt.legend(["SA", "RA"])
         plt.grid(True)
         plt.savefig(os.path.join(save_folder, 'val_acc.png'))
         plt.close()
@@ -204,6 +211,10 @@ for epoch in range(start_epoch, args.epochs):
         plt.plot(val_TA, 'r')
         val_ATA.append(val_ATA[-1])
         plt.plot(val_ATA, 'g')
+        plt.xlabel('Epoch')
+        plt.ylabel('Accuracy')
+        plt.title('Validation Accuracy')
+        plt.legend(["SA", "RA"])
         plt.grid(True)
         plt.savefig(os.path.join(save_folder, 'val_acc.png'))
         plt.close()
